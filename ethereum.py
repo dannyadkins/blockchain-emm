@@ -170,7 +170,7 @@ def test_naive_EMM_add_and_delete():
     naive.update("bar", "foo3", "+")
     naive.update("bar", "foo1", "-")
     read_result = naive.query('bar')
-    print(read_result)
+    assert read_result == set(val)
     print("Passed check: test_naive_EMM_add_and_delete")
 
 test_naive_EMM_add_and_delete()
