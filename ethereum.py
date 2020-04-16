@@ -5,6 +5,8 @@ w3 = Web3(Web3.HTTPProvider(infura_url))
 import time
 import pickle
 
+from Crypto.Cipher import AES
+
 class EthereumHandler:
     def __init__(self, load=True):
         print("Ethereum network connected: ", w3.isConnected())
@@ -45,12 +47,12 @@ class EthereumHandler:
           self.private_key,
         )
         sent_tx = w3.eth.sendRawTransaction(signed_txn.rawTransaction)
-        tx_data = self.awaitTransactionReceipt(sent_tx)
+        tx_data = self.await_transaction_receipt(sent_tx)
         hash = tx_data['transactionHash']
         print("Message successfully sent. Hash: ", hash.hex())
         return hash.hex()
 
-    def awaitTransactionReceipt(self, tx, i=0):
+    def await_transaction_receipt(self, tx, i=0):
         try:
             receipt = w3.eth.getTransactionReceipt(tx)
             return receipt
@@ -61,7 +63,17 @@ class EthereumHandler:
             if (i % 20 == 0):
                 print("Waited " + str(i) + " seconds for tx to confirm...")
                 print(e)
-            return self.awaitTransactionReceipt(tx, i+1)
+            return self.await_transaction_receipt(tx, i+1)
+
+    def get_decoded_msg(hash):
+        tx_data = w3.eth.getTransaction(hash)
+
+        input = tx_data['input']
+        if (input[:2] != '0x'):
+            raise Exception("Invalid hex string found in transaction")
+
+        decoded_data = codecs.decode(input[2:], "hex").decode('utf-8')
+        return decoded_data
 
 def parse_val_string(string):
     add_set = set()
@@ -122,13 +134,7 @@ class NaiveBlockchainEMM:
         vals = ''
         root = self.roots[key]
         while root != None:
-            tx_data = w3.eth.getTransaction(root)
-
-            input = tx_data['input']
-            if (input[:2] != '0x'):
-                raise Exception("Invalid hex string found in transaction")
-
-            decoded_data = codecs.decode(input[2:], "hex").decode('utf-8')
+            decoded_data = self.handler.get_decoded_msg(root)
 
             decoded_data_dict = {}
             for param in decoded_data.split("?"):
