@@ -6,9 +6,10 @@ from time import sleep
 import math
 
 class NaiveBlockchainEMM:
-    def __init__(self, type="ethereum", filepath=None):
+    def __init__(self, blockchain="ethereum", filepath=None):
         self.roots = {}
-        if (type == "algorand"):
+        self.blockchain = blockchain
+        if (blockchain == "algorand"):
             self.handler = AlgorandHandler()
         else:
             self.handler = EthereumHandler()
@@ -75,9 +76,10 @@ class NaiveBlockchainEMM:
         return parse_val_string(vals)
 
 class ImprovedNaiveBlockchainEMM:
-    def __init__(self, type="ethereum", filepath=None):
+    def __init__(self, blockchain="ethereum", filepath=None):
         self.roots = {}
-        if (type == "algorand"):
+        self.blockchain = blockchain
+        if (blockchain == "algorand"):
             self.handler = AlgorandHandler()
         else:
             self.handler = EthereumHandler()

@@ -3,6 +3,7 @@ from Scheme1EMM import Scheme1EMM
 import time
 import csv
 import os
+import math
 
 
 def write_results_to_csv(type, blockchain, stage, num_keys, num_vals_per_key, time, cost, file_size):
@@ -10,7 +11,7 @@ def write_results_to_csv(type, blockchain, stage, num_keys, num_vals_per_key, ti
         writer = csv.writer(csvfile, delimiter=',')
         writer.writerow([type, blockchain, stage, num_keys, num_vals_per_key, int(time*100)/100, cost, file_size])
 
-def test_stabilization(type="naive", blockchain="algorand", num_keys = 5, num_vals_per_key = 1):
+def test_stabilization(type="naive", blockchain="algorand", num_keys = 1, num_vals_per_key = 1):
     if (type == "naive"):
         emm = NaiveBlockchainEMM(blockchain)
     elif (type == "improved"):
@@ -47,13 +48,13 @@ def test_stabilization(type="naive", blockchain="algorand", num_keys = 5, num_va
     write_results_to_csv(type=type, blockchain=blockchain, stage="stabilization", num_keys=num_keys, num_vals_per_key=num_vals_per_key, time=stabilization_time, cost=total_cost, file_size=-1)
     return emm
 
-def test_delete(emm, num_keys = 5, num_vals_per_key = 1):
+def test_delete(emm, type, num_keys = 1, num_vals_per_key = 1):
     mm = {}
 
     for i in range(0, num_keys):
         vals = []
         for j in range(0, num_vals_per_key):
-            vals.append("val" + str(j+1))
+            vals.append("val" + str(2 * j))
         mm['key' + str(i)] = vals
 
 
@@ -76,16 +77,14 @@ def test_delete(emm, num_keys = 5, num_vals_per_key = 1):
     # emm.save_to_file(file_name)
     # file_size = os.stat(file_name).st_size
 
-    write_results_to_csv(type=type, blockchain=blockchain, stage="stabilization", num_keys=num_keys, num_vals_per_key=num_vals_per_key, time=delete_time, cost=-1, file_size=-1)
+    write_results_to_csv(type=type, blockchain=emm.blockchain, stage="deletion", num_keys=num_keys, num_vals_per_key=num_vals_per_key, time=delete_time, cost=-1, file_size=-1)
     return emm
 
 
 if __name__ == '__main__':
-    for i in range(0, 32, 4):
-        if (i == 0):
-            i = 1
-        for j in range(4, 8, 4):
-            if (j == 0):
-                j = 1
-            emm = test_stabilization(type="scheme1", blockchain="algorand", num_keys=i, num_vals_per_key=j)
-            test_delete(emm, num_keys=i, num_vals_per_key=1)
+    type="scheme1"
+    for i in range(8, 20):
+        for j in range(1, math.ceil(i/2)):
+            print("Running tests for ", i, " insertions and ", j, " deletions")
+            emm = test_stabilization(type=type, blockchain="algorand", num_keys=1, num_vals_per_key=i)
+            test_delete(emm, type=type, num_keys=1, num_vals_per_key=j)

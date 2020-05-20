@@ -10,7 +10,7 @@ import json
 
 
 class Scheme1EMM:
-    def __init__(self, type="ethereum", filepath=None):
+    def __init__(self, blockchain="ethereum", filepath=None):
         self.roots = {}
         self.patch_root_tx_hashes = {}
 
@@ -19,7 +19,9 @@ class Scheme1EMM:
 
         self.node_to_txhash = {}
 
-        if (type == "algorand"):
+        self.blockchain = blockchain
+
+        if (blockchain == "algorand"):
             self.handler = AlgorandHandler()
         else:
             self.handler = EthereumHandler()
@@ -52,8 +54,11 @@ class Scheme1EMM:
     def load_patch_tree_from_node(self, node_tx_hash):
         if (len(node_tx_hash) == 0):
             return Node("")
-        decoded_data = self.handler.get_decoded_msg(node_tx_hash) ## looks like l=left child address?r=right child address?s=successor?p=predecessor
-        print("Decoded data:", decoded_data)
+        try:
+            decoded_data = self.handler.get_decoded_msg(node_tx_hash) ## looks like l=left child address?r=right child address?s=successor?p=predecessor
+        except Exception as e:
+            print("Error loading ", node_tx_hash)
+            raise(e)
         decoded_data_dict = {}
         for param in decoded_data.split("?"):
             data = param.split('=')
@@ -101,7 +106,6 @@ class Scheme1EMM:
     def init_blockchain_MM(self, map, parallel=True):
         if (parallel):
             stagger_const = 5 / (1 + math.exp(-0.05 * (len(map) - 20)))
-            print("Stagger constant: ", stagger_const)
 
             manager = mp.Manager()
             self.roots = manager.dict(self.roots)
@@ -152,7 +156,7 @@ class Scheme1EMM:
             C = {}
             addr_list = []
             ## search over chain SKIPPING PATCHED ITEMS. You are not currently doing this. Implement self.query like this first.
-            while (root != None):
+            while (root != None and root != ''):
                 decoded_data = self.handler.get_decoded_msg(root)
                 decoded_data_dict = {}
                 for param in decoded_data.split("?"):
@@ -168,19 +172,20 @@ class Scheme1EMM:
                     root = self.patches_dict[decoded_data_dict['o']]
                 else:
                     root = decoded_data_dict['o']
+            addr_list = [('_', 'HEAD')] + addr_list + [('_', 'TAIL')]
+            new_tree = build(list(patch_tree_root_node))
+
             for v in val:
                 for i in range(len(addr_list)):
                     item = addr_list[i]
                     if item[0] == "+"+v:
                         C[item[0]] = item[1]
-                        P[item[0]] = (addr_list[i+1][1], addr_list[i-1][1])
+                        P[item[0]] = (addr_list[i-1][1], addr_list[i+1][1])
             ## End of step 3
-
             ## C = every tx hash that value v is stored at.
             ## P = the successor and predecessor of v every time it is stored
 
             ## shallow copy the tree and begin modifying
-            new_tree = build(list(patch_tree_root_node))
 
             ## Beginning of step 4 (value_tx_hash = c)
             ## OUTBOUND PATCHES
@@ -203,36 +208,39 @@ class Scheme1EMM:
                 else:
                     ## TODO: create patch succ_addr -> pred_addr
 
-                    ## create new node, put in tree in proper location. (one index beyond the length of tree)
-                    new_node = Node(self.construct_node_data(succ_addr.strip(), pred_addr.strip(), left_addr="", right_addr="").strip())
+                    ## create new node, put in tree in proper location. (one index beyond the length of tree, or can traverse to make BST)
+                    new_node = Node(self.construct_node_data(succ_addr.strip(), pred_addr.strip (), left_addr="", right_addr="").strip())
                     new_tree[len(list(new_tree))] = new_node
             ## End of step 5
 
             new_tree_list = list(new_tree)
             for i in range(len(new_tree_list)-1, -1, -1):
                 if (self.node_string(new_tree_list[i]) not in self.node_to_txhash):
-                    j = i
-                    last_hash = None
-                    last_node = None
-                    while j >= 0:
-                        node = new_tree_list[j]
-                        if (not last_node == None):
-                            if (str(last_node.value) > str(node.value)):
-                                node.right = Node(last_node.value)
-                                node.value = str(node.value).replace('?r=', '?r=' + last_hash)
-                            else:
-                                node.left = Node(last_node.value)
-                                node.value = str(node.value).replace('?l=', '?l=' + last_hash)
-                        print("Adding node: ", str(node.value).strip())
-                        tx_hash, cost = self.handler.send_msg_on_blockchain(str(node.value).strip())
-                        print("New patch stored on blockchain at ", tx_hash)
-                        self.node_to_txhash[self.node_string(node)] = tx_hash
-                        j = math.floor((j-1)/2)
-                        last_hash = tx_hash
-                        last_node = node
-            if (not last_node == None):
-                self.patch_root_tx_hashes[key] = self.node_to_txhash[self.node_string(last_node)]
-                print("Updating patches roots: ", self.patch_root_tx_hashes)
+
+                    node = new_tree_list[i]
+                    tx_hash, cost = self.handler.send_msg_on_blockchain(str(node.value).strip())
+                    self.node_to_txhash[self.node_string(node).strip()] = tx_hash
+                    new_tree_list[i] = node
+
+                    ## propagate to parent
+                    if ((i-1)/2 >= 0):
+                        parent = new_tree_list[math.floor((i-1)/2)]
+                        if (i % 2 == 0):
+                            start_index = str(parent.value).strip().index('?r=')
+                            end_index = len(str(parent.value).strip())
+                            modified_value = str(parent.value).strip()[0: start_index] + "?r=" + tx_hash + str(parent.value).strip()[end_index:]
+                            parent.value = modified_value
+                            parent.right = Node(str(node.value).strip())
+                        else:
+                            start_index = str(parent.value).strip().index('?l=')
+                            end_index = str(parent.value).strip().index('?r=')
+                            modified_value = str(parent.value).strip()[0:start_index] +   "?l=" + tx_hash + str(parent.value).strip()[end_index:]
+                            parent.value = modified_value
+                            parent.left =  Node(str(node.value).strip())
+                        new_tree_list[math.floor((i-1)/2)] = parent
+
+            if (not node == None):
+                self.patch_root_tx_hashes[key] = self.node_to_txhash[self.node_string(new_tree_list[0])]
 
             ## for each item in new tree (search):
             ## if nodestr(new item) is not in self.node_to_txhash:
@@ -245,9 +253,12 @@ class Scheme1EMM:
         root = self.roots[key]
 
         self.load_patch_tree_from_root(key)
-        print("Patches dict:", self.patches_dict)
+        if ('HEAD' in self.patches_dict):
+            root = self.patches_dict['HEAD']
+        while root != None and root != '':
+            if (root == 'TAIL'):
+                break
 
-        while root != None:
             decoded_data = self.handler.get_decoded_msg(root)
 
             decoded_data_dict = {}
@@ -255,11 +266,12 @@ class Scheme1EMM:
                 data = param.split('=')
                 decoded_data_dict[data[0]] = data[1]
             assert decoded_data_dict['k'] == key
+
             vals += decoded_data_dict['v'] + ','
             if (len(decoded_data_dict['o']) == 0):
                 root = None
-            elif (decoded_data_dict['o'] in self.patches_dict):
-                root = self.patches_dict[decoded_data_dict['o']]
+            elif (root in self.patches_dict):
+                root = self.patches_dict[root]
             else:
                 root = decoded_data_dict['o']
         return parse_val_string(vals)

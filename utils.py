@@ -6,10 +6,11 @@ def parse_val_string(string):
     delete_set = set()
 
     for item in string.rstrip(',').split(','):
-        if item[0] == "+":
-            add_set.add(item[1:])
-        if item[0] == "-":
-            delete_set.add(item[1:])
+        if (len(item) > 0):
+            if item[0] == "+":
+                add_set.add(item[1:])
+            if item[0] == "-":
+                delete_set.add(item[1:])
 
     return add_set - delete_set
 
